@@ -74,7 +74,8 @@ Configuration variables:
 - **universe** (*Optional; default=0*): Art-Net universe for these DMX channels
 - **dmx_channels** (*Optional; default=512*): The number of DMX channels to send a value for (even number between 2 & 512)
 - **default_level** (*Optional; default=255*): Default level for Home Assistant to assume all lights have been set to - in most cases 0 would make sense. Note Home Assistant will not send these values to the gateway until an explicit change is made unless send_levels_on_startup is True.
-- **default_type** (*Optional; default=dimmer*): specify the default type for devices that have not specified a type
+- **default_off** (*Optional; default=True*): Whether Home Assistant should assume the device is off by default. See *default_level*.
+- **default_type** (*Optional; default=dimmer*): Specify the default type for devices that have not specified a type
 - **send_levels_on_startup** (*Optional; default=True*): Setting this to False means Home Assistant will not send any DMX frames until a change is made.
 
 Device configuration variables:
@@ -91,6 +92,7 @@ Device configuration variables:
   - **'switch'** (single channel 0 or 255)
   - **'custom_white'** (configure dimmer and temperature in any required channel order)
 - **default_level** (*Optional; default=255*): Default level to assume the light is set to (0-255). 
+- **default_off** (*Optional; default=True*): Whether Home Assistant should assume the device is off by default. See *default_level*.
 - **channel_setup** (*Optional; for custom_white lights*): String to define channel layout where:
   - d = dimmer (brightness 0 to 255)
   - t = temperature (0 = warm, 255 = cold)
@@ -101,7 +103,7 @@ Device configuration variables:
 Please use [light_profiles.csv](https://www.home-assistant.io/components/light/#default-turn-on-values) if you want to specify a default colour or brightness to be used when turning the light on in HA.
 - **default_rgb** (*Optional*): Default colour to give to Home Assistant for the light in the format [R,G,B]
 - **white_level** (*Optional*): Default white level for RGBW lights (0-255)
-- **transition** (*Optional*): Set a default fade time for transitions. Transition times specified through the turn_on / turn_off service calls in Home Assistant will override this behaviour. 
+- **transition** (*Optional*): Set a default fade time in seconds for transitions. Can be a decimal number. Transition times specified through the turn_on / turn_off service calls in Home Assistant will override this behaviour. 
 
 To enable debug logging for this component:
 

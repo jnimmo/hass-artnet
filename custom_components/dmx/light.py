@@ -1,13 +1,14 @@
 """
 Home Assistant support for DMX lights over IP.
 
-Date:     2019-03-03
+Date:     2020-01-06
 Homepage: https://github.com/jnimmo/hass-dmx
 Author:   James Nimmo
 """
 import asyncio
 import logging
 import socket
+import random
 from struct import pack
 
 from homeassistant.const import (CONF_DEVICES, CONF_HOST, CONF_NAME, CONF_PORT,
@@ -31,12 +32,17 @@ import voluptuous as vol
 
 _LOGGER = logging.getLogger(__name__)
 
+# Give every command a semi-unique identifier per channelgroup
+# to allow cancelling transitions
+_last_command_ids = {}
+
 DATA_ARTNET = 'light_dmx'
 
 CONF_CHANNEL = 'channel'
 CONF_DMX_CHANNELS = 'dmx_channels'
 CONF_DEFAULT_COLOR = 'default_rgb'
 CONF_DEFAULT_LEVEL = 'default_level'
+CONF_DEFAULT_OFF = 'default_off'
 CONF_DEFAULT_TYPE = 'default_type'
 CONF_SEND_LEVELS_ON_STARTUP = 'send_levels_on_startup'
 CONF_TRANSITION = ATTR_TRANSITION
@@ -123,6 +129,7 @@ PLATFORM_SCHEMA = PLATFORM_SCHEMA.extend({
                                                           vol.Range(min=1,
                                                           max=512)),
     vol.Optional(CONF_DEFAULT_LEVEL, default=255): cv.byte,
+    vol.Optional(CONF_DEFAULT_OFF, default=True): vol.Boolean(),
     vol.Optional(CONF_DEFAULT_TYPE, default=CONF_LIGHT_TYPE_DIMMER): cv.string,
     vol.Required(CONF_DEVICES): vol.All(cv.ensure_list, [
         {
@@ -132,10 +139,11 @@ PLATFORM_SCHEMA = PLATFORM_SCHEMA.extend({
             vol.Optional(CONF_TYPE): vol.In(CONF_LIGHT_TYPES),
             vol.Optional(CONF_DEFAULT_LEVEL): cv.byte,
             vol.Optional(ATTR_WHITE_VALUE): cv.byte,
+            vol.Optional(CONF_DEFAULT_OFF): vol.Boolean(),
             vol.Optional(CONF_DEFAULT_COLOR): vol.All(
                 vol.ExactSequence((cv.byte, cv.byte, cv.byte)),
                 vol.Coerce(tuple)),
-            vol.Optional(CONF_TRANSITION, default=0): vol.All(vol.Coerce(int),
+            vol.Optional(CONF_TRANSITION, default=0): vol.All(vol.Coerce(float),
                                                               vol.Range(min=0,
                                                               max=60)),
             vol.Optional(CONF_CHANNEL_SETUP): cv.string,
@@ -155,10 +163,11 @@ def async_setup_platform(hass, config, async_add_devices, discovery_info=None):
 
     # Send the specified default level to pre-fill the channels with
     overall_default_level = config.get(CONF_DEFAULT_LEVEL)
+    overall_default_off = config.get(CONF_DEFAULT_OFF)
     default_light_type = config.get(CONF_DEFAULT_TYPE)
 
     dmx_gateway = DMXGateway(host, universe, port, overall_default_level,
-                             config[CONF_DMX_CHANNELS])
+                             overall_default_off, config[CONF_DMX_CHANNELS])
 
     lights = (DMXLight(light, dmx_gateway, send_levels_on_startup, default_light_type) for light in
               config[CONF_DEVICES])
@@ -205,13 +214,15 @@ class DMXLight(Light):
             self._brightness = max(self._rgb)
             self._rgb = scale_rgb_to_brightness(self._rgb, self._brightness)
 
-        if self._brightness >= 0 or self._white_value >= 0:
+        default_off = light.get(CONF_DEFAULT_OFF, dmx_gateway._default_off)
+
+        if default_off == False and (self._brightness >= 0 or self._white_value >= 0):
             self._state = STATE_ON
         else:
             self._state = STATE_OFF
 
         # Send default levels to the controller
-        self._dmx_gateway.set_channels(self._channels, self.dmx_values,
+        self._dmx_gateway.set_channels(self._channels, self.dmx_values if default_off == False else 0,
                                        send_immediately)
 
         _LOGGER.debug(f"Intialized DMX light {self._name}")
@@ -437,7 +448,7 @@ class DMXGateway(object):
     """
 
     def __init__(self, host, universe, port, default_level,
-                 number_of_channels):
+                 default_off, number_of_channels):
         """
         Initialise a bank of channels, with a default value.
         """
@@ -447,6 +458,7 @@ class DMXGateway(object):
         self._port = port
         self._number_of_channels = number_of_channels
         self._default_level = default_level
+        self._default_off = default_off
 
         # Number of channels must be even
         if number_of_channels % 2 != 0:
@@ -479,6 +491,8 @@ class DMXGateway(object):
         _LOGGER.debug("Sending Art-Net frame")
 
     def set_channels(self, channels, value, send_immediately=True):
+        _last_command_ids[channels[0]] = random.randint(1, 1000000)
+
         # Single value for standard channels, RGB channels will have 3 or more
         value_arr = [value]
         if type(value) is tuple or type(value) is list:
@@ -494,6 +508,9 @@ class DMXGateway(object):
     @asyncio.coroutine
     def set_channels_async(self, channels, value, transition=0, fps=40,
                            send_immediately=True):
+        _last_command_ids[channels[0]] = random.randint(1, 1000000)
+        currently_exec_cmd_id = _last_command_ids[channels[0]]
+        
         original_values = self._channels[:]
         # Minimum of one frame for a snap transition
         number_of_frames = max(int(transition * fps), 1)
@@ -522,6 +539,11 @@ class DMXGateway(object):
                 self.send()
 
             yield from asyncio.sleep(1. / fps)
+
+            # Abort transition if new command has been sent
+            if currently_exec_cmd_id != _last_command_ids[channels[0]]:
+                _LOGGER.info("Transition aborted")
+                break
 
     def get_channel_level(self, channel):
         """
