@@ -86,6 +86,7 @@ Device configuration variables:
   - **'rgbw'** (red, green, blue, white)
   - **'rgbw_auto'** (red, green, blue, automatically calculated white value) 
   - **'drgb'** (dimmer, red, green, blue)
+  - **'rgbd'** (red, green, blue, dimmer)
   - **'drgbw'** (dimmer, red, green, blue, white)
   - **'rgbwd'** (red, green, blue, white, dimmer)
   - **'switch'** (single channel 0 or 255)
