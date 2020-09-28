@@ -323,18 +323,21 @@ class DMXLight(LightEntity):
             return color_rgb_to_rgbw(*scaled_rgb)
         elif self._type == CONF_LIGHT_TYPE_DRGB:
             drgb = [self._brightness]
-            drgb.extend(self._rgb)
+            drgb.extend(self._rgb if self._brightness > 0 else [0, 0, 0])
+            _LOGGER.debug("drgb: " + ', '.join([str(x) for x in drgb]));
             return drgb
         elif self._type == CONF_LIGHT_TYPE_DRGBW:
             drgbw = [self._brightness]
-            drgbw.extend(self._rgb)
-            drgbw.append(self._white_value)
+            drgbw.extend(self._rgb if self._brightness > 0 else [0, 0, 0])
+            drgbw.append(self._white_value if self.brightness > 0 else 0)
+            _LOGGER.debug("drgbw: " + ', '.join([str(x) for x in drgbw]));
             return drgbw
         elif self._type == CONF_LIGHT_TYPE_RGBWD:
             rgbwd = list()
-            rgbwd.extend(self._rgb)
-            rgbwd.append(self._white_value)
+            rgbwd.extend(self._rgb if self._brightness > 0 else [0, 0, 0])
+            rgbwd.append(self._white_value if self._brightness > 0 else 0)
             rgbwd.append(self._brightness)
+            _LOGGER.debug("rgbwd: " + ', '.join([str(x) for x in rgbwd]));
             return rgbwd
         elif self._type == CONF_LIGHT_TYPE_SWITCH:
             if self.is_on:
@@ -469,7 +472,7 @@ class DMXGateway(object):
             self._number_of_channels += 1
 
         # Initialise the DMX channel array with the default values
-        self._channels = [self._default_level] * self._number_of_channels
+        self._channels = [int(self._default_level)] * self._number_of_channels
 
         # Initialise socket
         self._socket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)  # UDP
@@ -492,7 +495,7 @@ class DMXGateway(object):
         packet = self._base_packet[:]
         packet.extend(self._channels)
         self._socket.sendto(packet, (self._host, self._port))
-        _LOGGER.debug("Sending Art-Net frame")
+        _LOGGER.debug("Sending Art-Net frame to " + self._host + ":" + str(self._port) + " - " + ', '.join([str(x) for x in packet]));
 
     def set_channels(self, channels, value, send_immediately=True):
         # Single value for standard channels, RGB channels will have 3 or more
@@ -502,7 +505,7 @@ class DMXGateway(object):
 
         for x, channel in enumerate(channels):
             default_value = value_arr[min(x, len(value_arr) - 1)]
-            self._channels[channel-1] = default_value
+            self._channels[channel-1] = int(default_value)
 
         if send_immediately:
             self.send()
