@@ -1,6 +1,6 @@
-# Home Assistant DMX over IP Light Platform (Art-Net)
+# Home Assistant DMX over IP Light Platform (Art-Net & KiNet)
 
-The DMX integration for Home Assistant allows you to send DMX values to an [Art-Net](http://www.art-net.org.uk) capable DMX interface. This component is a one way integration which sends [Art-Net](https://en.wikipedia.org/wiki/Art-Net) UDP packets to the DMX interface. This integration uses no external libraries and requires at least Python version 3.5.
+The DMX integration for Home Assistant allows you to send DMX values to an [Art-Net](http://www.art-net.org.uk) or [KiNet](https://www.colorkinetics.com/) capable DMX interface. This component is a one way integration which sends [Art-Net](https://en.wikipedia.org/wiki/Art-Net) or KiNet UDP packets to the DMX interface. This integration uses no external libraries and requires at least Python version 3.5.
 
 ## Prerequisites
 
@@ -69,9 +69,10 @@ light:
 ```
 
 Configuration variables:
-- **host** (*Required*): Art-Net/DMX gateway address
-- **port** (*Optional; default=6454*): Art-Net/DMX gateway port
-- **universe** (*Optional; default=0*): Art-Net universe for these DMX channels
+- **host** (*Required*): Gateway address
+- **port** (*Optional; default=6454 or 6038*): Gateway port
+- **protocol** (*Optional; default=artnet*): Gateway protocol: artnet or kinet
+- **universe** (*Optional; default=0*): Universe for these DMX channels
 - **dmx_channels** (*Optional; default=512*): The number of DMX channels to send a value for (even number between 2 & 512)
 - **default_level** (*Optional; default=255*): Default level for Home Assistant to assume all lights have been set to - in most cases 0 would make sense. Note Home Assistant will not send these values to the gateway until an explicit change is made unless send_levels_on_startup is True.
 - **default_type** (*Optional; default=dimmer*): specify the default type for devices that have not specified a type

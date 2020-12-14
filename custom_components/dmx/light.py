@@ -56,6 +56,17 @@ CONF_SEND_LEVELS_ON_STARTUP = 'send_levels_on_startup'
 CONF_TRANSITION = ATTR_TRANSITION
 CONF_UNIVERSE = 'universe'
 CONF_CHANNEL_SETUP = 'channel_setup'
+CONF_PROTOCOL = 'protocol'
+
+# Protocols
+CONF_PROTOCOL_ARTNET = 'artnet'
+CONF_PROTOCOL_KINET = 'kinet'
+CONF_PROTOCOLS = [CONF_PROTOCOL_ARTNET,
+                  CONF_PROTOCOL_KINET]
+
+# Ports
+CONF_PORT_ARTNET = 6454
+CONF_PORT_KINET = 6038
 
 # Light types
 CONF_LIGHT_TYPE_DIMMER = 'dimmer'
@@ -155,8 +166,9 @@ PLATFORM_SCHEMA = PLATFORM_SCHEMA.extend({
             vol.Optional(CONF_CHANNEL_SETUP): cv.string,
         }
     ]),
-    vol.Optional(CONF_PORT, default=6454): cv.port,
+    vol.Optional(CONF_PORT): cv.port,
     vol.Optional(CONF_SEND_LEVELS_ON_STARTUP, default=True): cv.boolean,
+    vol.Optional(CONF_PROTOCOL, default=CONF_PROTOCOL_ARTNET): vol.In(CONF_PROTOCOLS),
 })
 
 
@@ -171,8 +183,17 @@ def async_setup_platform(hass, config, async_add_devices, discovery_info=None):
     overall_default_level = config.get(CONF_DEFAULT_LEVEL)
     default_light_type = config.get(CONF_DEFAULT_TYPE)
 
-    dmx_gateway = DMXGateway(host, universe, port, overall_default_level,
-                             config[CONF_DMX_CHANNELS])
+    protocol = config.get(CONF_PROTOCOL)
+    if protocol == CONF_PROTOCOL_ARTNET:
+        if not port:
+            port = CONF_PORT_ARTNET
+        dmx_gateway = ArtNetGateway(host, universe, port, overall_default_level,
+                config[CONF_DMX_CHANNELS])
+    elif protocol == CONF_PROTOCOL_KINET:
+        if not port:
+            port = CONF_PORT_KINET
+        dmx_gateway = KiNetGateway(host, universe, port, overall_default_level,
+                config[CONF_DMX_CHANNELS])
 
     lights = (DMXLight(light, dmx_gateway, send_levels_on_startup, default_light_type) for light in
               config[CONF_DEVICES])
@@ -191,7 +212,7 @@ class DMXLight(LightEntity):
         # Fixture configuration
         self._channel = light.get(CONF_CHANNEL)
         self._name = light.get(CONF_NAME, f"DMX Channel {self._channel}")
-        
+
         self._type = light.get(CONF_TYPE, default_type)
 
         self._fade_time = light.get(CONF_TRANSITION)
@@ -347,7 +368,7 @@ class DMXLight(LightEntity):
             # C = cool (not scaled)
             # h = hot (scaled for brightness)
             # H = hot (not scaled)
-            # t = temperature (0 = hot, 255 = cold) 
+            # t = temperature (0 = hot, 255 = cold)
             # T = temperature (255 = hot, 0 = cold)
 
             ww_fraction = (self._color_temp - self.min_mireds) / (
@@ -449,7 +470,7 @@ class DMXLight(LightEntity):
 
 class DMXGateway(object):
     """
-    Class to keep track of the values of DMX channels.
+    Base class to keep track of the values of DMX channels.
     """
 
     def __init__(self, host, universe, port, default_level,
@@ -471,28 +492,12 @@ class DMXGateway(object):
         # Initialise the DMX channel array with the default values
         self._channels = [self._default_level] * self._number_of_channels
 
-        # Initialise socket
-        self._socket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)  # UDP
-
-        packet = bytearray()
-        packet.extend(map(ord, "Art-Net"))
-        packet.append(0x00)  # Null terminate Art-Net
-        packet.extend([0x00, 0x50])  # Opcode ArtDMX 0x5000 (Little endian)
-        packet.extend([0x00, 0x0e])  # Protocol version 14
-        packet.extend([0x00, 0x00])  # Sequence, Physical
-        packet.extend([self._universe, 0x00])  # Universe
-        packet.extend(pack('>h', self._number_of_channels))
-        self._base_packet = packet
-
     def send(self):
         """
         Send the current state of DMX values to the gateway via UDP packet.
         """
-        # Copy the base packet then add the channel array
-        packet = self._base_packet[:]
-        packet.extend(self._channels)
-        self._socket.sendto(packet, (self._host, self._port))
-        _LOGGER.debug("Sending Art-Net frame")
+        _LOGGER.debug("DMXGateway.send not implemented")
+        pass
 
     def set_channels(self, channels, value, send_immediately=True):
         # Single value for standard channels, RGB channels will have 3 or more
@@ -549,6 +554,65 @@ class DMXGateway(object):
     def default_level(self):
         return self._default_level
 
+class ArtNetGateway(DMXGateway):
+    """
+    Interface with a ArtNet device
+    """
+
+    def __init__(self, host, universe, port, default_level,
+                 number_of_channels):
+        super().__init__(host, universe, port, default_level, number_of_channels)
+
+        # Initialise socket
+        self._socket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)  # UDP
+
+        packet = bytearray()
+        packet.extend(map(ord, "Art-Net"))
+        packet.append(0x00)  # Null terminate Art-Net
+        packet.extend([0x00, 0x50])  # Opcode ArtDMX 0x5000 (Little endian)
+        packet.extend([0x00, 0x0e])  # Protocol version 14
+        packet.extend([0x00, 0x00])  # Sequence, Physical
+        packet.extend([self._universe, 0x00])  # Universe
+        packet.extend(pack('>h', self._number_of_channels))
+        self._base_packet = packet
+
+    def send(self):
+        """
+        Send the current state of DMX values to the gateway via UDP packet.
+        """
+        # Copy the base packet then add the channel array
+        packet = self._base_packet[:]
+        packet.extend(self._channels)
+        self._socket.sendto(packet, (self._host, self._port))
+        _LOGGER.debug(f"Sending Art-Net frame to {self._host}:{self._port}")
+
+class KiNetGateway(DMXGateway):
+    """
+    Interface with a KiNet device
+    """
+
+    def __init__(self, host, universe, port, default_level,
+                 number_of_channels):
+        super().__init__(host, universe, port, default_level, number_of_channels)
+
+        # Initialise socket
+        self._socket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)  # UDP
+
+        packet = bytearray()
+        packet.extend(pack(">IHH", 0x0401dc4a, 0x0100, 0x0101)) # Magic, version, type
+        packet.extend(pack(">IBBHI", 0, 0, 0, 0, 0xffffffff)) # sequence, port, padding, flags, timer
+        packet.extend(pack("B", self._universe))  # Universe
+        self._base_packet = packet
+
+    def send(self):
+        """
+        Send the current state of DMX values to the gateway via UDP packet.
+        """
+        # Copy the base packet then add the channel array
+        packet = self._base_packet[:]
+        packet.extend(pack("512B", *self._channels))
+        self._socket.sendto(packet, (self._host, self._port))
+        _LOGGER.debug(f"Sending KiNet frame to {self._host}:{self._port}")
 
 def scale_rgb_to_brightness(rgb, brightness):
     brightness_scale = (brightness / 255)
