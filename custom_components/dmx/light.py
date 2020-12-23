@@ -322,11 +322,11 @@ class DMXLight(LightEntity):
             scaled_rgb = scale_rgb_to_brightness(self._rgb, self._brightness)
             return color_rgb_to_rgbw(*scaled_rgb)
         elif self._type == CONF_LIGHT_TYPE_DRGB:
-            drgb = [self._brightness]
+            drgb = [round(self._brightness)]
             drgb.extend(self._rgb)
             return drgb
         elif self._type == CONF_LIGHT_TYPE_DRGBW:
-            drgbw = [self._brightness]
+            drgbw = [round(self._brightness)]
             drgbw.extend(self._rgb)
             drgbw.append(self._white_value)
             return drgbw
