@@ -4,5 +4,6 @@
   "documentation": "https://github.com/jnimmo/hass-dmx/",
   "dependencies": [],
   "codeowners": [],
-  "requirements": []
+  "requirements": [],
+  "version": "0.1.0"
 }
